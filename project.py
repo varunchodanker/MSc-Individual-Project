@@ -112,7 +112,7 @@ def load_market_returns(filename):
 
 def load_security_returns(
     filename, m_exrts, mkt_rets, 
-    drop_outliers=[]
+    drop_outliers=[], keep_cols=None
 ):
     """ Loads a dataframe with security returns and other associated information 
     like betas. 
@@ -120,6 +120,8 @@ def load_security_returns(
     Args:
         drop_outliers: list of column names whose outliers should be dropped at 
             finalisation.
+        keep_cols: list of columns that will be kept at finalisation, the rest 
+            of the columns will be discarded.
     """
     security_returns = pd.read_csv(
         filename, 
@@ -248,8 +250,16 @@ def load_security_returns(
     # Prepare for linking based on the prior year - for fundamentals and emissions
     security_returns["datayear"] = security_returns.reset_index()["data_ym"].dt.year.values
     security_returns["datayear-1"] = security_returns["datayear"] - 1
+    # filtering down of the columns, to those that are relevant, is also possible
+    if keep_cols is not None:
+        security_returns = security_returns[keep_cols]
 
     return security_returns
+
+
+def next():
+    pass
+
 
 def main():
     pass
