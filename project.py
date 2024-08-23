@@ -247,7 +247,8 @@ def load_security_returns(
     # combine beta back into the main data
     security_returns = pd.concat([security_returns, security_betas], axis=1)
 
-    # finalise the data, dropping due to the missing values from the shifts, etc
+    # finalise the data, dropping due to the missing values from the 
+    # shifts, return calculations, etc
     security_returns = security_returns.dropna()
     # removal of rows with outliers is also possible: "m_USD_ret", "beta", "USD_mktval"
     if len(drop_outliers) > 0:
@@ -268,7 +269,7 @@ def load_security_returns(
     return security_returns
 
 
-def load_fundamentals(filename):
+def load_fundamentals(filename, m_exrts, keep_cols=None):
     """ 
     
     Args:
@@ -280,9 +281,67 @@ def load_fundamentals(filename):
         filename, 
         parse_dates=["datadate"]
     )
+    fundamentals = fundamentals.rename(columns={"fyear": "fiscalyear"})
+    # consolidate double-reporting, per fiscal year, by companies (occurs due 
+    # to different reporting formats)
     fundamentals = fundamentals.groupby(
-        ["gvkey", "fyear"]
+        ["gvkey", "fiscalyear"]
     ).first()
+    # drop rows if there are still any null values left despite consolidation
+    fundamentals = fundamentals.dropna()
+
+    # standardise values to USD, processing exchange rates so that they are 
+    # appropriate for this purpose, and then joining them so that they can 
+    # be applied.
+    m_exrts_flat = m_exrts.reset_index()
+    m_exrts_flat["datayear"] = m_exrts_flat["data_ym"].dt.year
+    # yearly balance sheet figures conversion rates
+    y_bs_exrts = m_exrts_flat.drop(columns="data_ym").groupby(
+        ["curd", "datayear"]
+    ).last()[["exratd_toUSD"]].rename(
+        columns={"exratd_toUSD": "bs_toUSD"}
+    )
+    # yearly income statement figures conversion rates
+    y_is_exrts = m_exrts_flat.drop(columns="data_ym").groupby(
+        ["curd", "datayear"]
+    ).mean()[["exratd_toUSD"]].rename(columns={"exratd_toUSD": "is_toUSD"})
+    # combine the above two sets of rates
+    y_fs_exrts = pd.concat(
+        [y_bs_exrts, y_is_exrts], 
+        axis=1
+    )
+    # join them to the main table
+    fundamentals = fundamentals.reset_index().merge(
+        y_fs_exrts, 
+        how="left", 
+        left_on=["curcd", "fiscalyear"], 
+        right_index=True, 
+    ).set_index(
+        ["gvkey", "fiscalyear"]
+    )
+    # apply the rates
+    fundamentals["at"] *= fundamentals["bs_toUSD"]
+    fundamentals["ceq"] *= fundamentals["bs_toUSD"]
+    # 
+    fundamentals["oiadp"] *= fundamentals["is_toUSD"]
+    fundamentals["revt"] *= fundamentals["is_toUSD"]
+
+    # determine investment in each year by percentage change in assets
+    fundamentals["investment"] = fundamentals.groupby(
+        level="gvkey"
+    )["at"].pct_change()
+    # null for the first fiscalyear entry for companies
+
+    # determine operating profitability by operating profit margin
+    fundamentals["opm"] = fundamentals["oiadp"] / fundamentals["revt"]
+    # some inf values can be caused here due to div by 0
+
+    # finalise the data, dropping all rows with null or non-finite values
+    with pd.option_context('mode.use_inf_as_null', True):
+        fundamentals = fundamentals.dropna()
+    # filtering down of the columns is also possible
+    if keep_cols is not None:
+        fundamentals = fundamentals[keep_cols]
 
     return fundamentals
 
