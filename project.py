@@ -193,6 +193,17 @@ def load_security_returns(
     security_returns["m_local_ret"] = (
         (1 + security_returns["local_ret"]) ** (1/security_returns["ret_mfreq"])
     ) - 1
+    # also convert all the returns from fractions to percentages
+    security_returns["local_ret"] *= 100
+    security_returns["USD_fxret"] *= 100
+    security_returns["GBP_fxret"] *= 100
+    # 
+    security_returns["USD_ret"] *= 100
+    security_returns["GBP_ret"] *= 100
+    # 
+    security_returns["m_USD_ret"] *= 100
+    security_returns["m_GBP_ret"] *= 100
+    security_returns["m_local_ret"] *= 100
 
     # market value
     security_returns["local_mktval"] = security_returns["cshom"] * security_returns["prccm"]
@@ -257,8 +268,23 @@ def load_security_returns(
     return security_returns
 
 
-def next():
-    pass
+def load_fundamentals(filename):
+    """ 
+    
+    Args:
+
+    Returns:
+        loaded dataframe with the relevant company fundamentals information
+    """
+    fundamentals = pd.read_csv(
+        filename, 
+        parse_dates=["datadate"]
+    )
+    fundamentals = fundamentals.groupby(
+        ["gvkey", "fyear"]
+    ).first()
+
+    return fundamentals
 
 
 def main():
