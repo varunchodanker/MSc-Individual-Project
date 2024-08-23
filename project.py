@@ -110,7 +110,17 @@ def load_market_returns(filename):
     return mkt_rets
 
 
-def load_security_returns(filename, m_exrts):
+def load_security_returns(
+    filename, m_exrts, mkt_rets, 
+    drop_outliers=[]
+):
+    """ Loads a dataframe with security returns and other associated information 
+    like betas. 
+    
+    Args:
+        drop_outliers: list of column names whose outliers should be dropped at 
+            finalisation.
+    """
     security_returns = pd.read_csv(
         filename, 
         parse_dates=["datadate"], 
@@ -186,7 +196,60 @@ def load_security_returns(filename, m_exrts):
     security_returns["local_mktval"] = security_returns["cshom"] * security_returns["prccm"]
     security_returns["USD_mktval"] = security_returns["local_mktval"] * security_returns["exratd_toUSD"]
     security_returns["GBP_mktval"] = security_returns["local_mktval"] * security_returns["exratd_toGBP"]
+    # shift one forward to prevent look-ahead bias
+    security_returns[
+        ["local_mktval", "USD_mktval", "GBP_mktval"]
+    ] = security_returns.groupby(
+        level=["gvkey", "iid"]
+    )[
+        ["local_mktval", "USD_mktval", "GBP_mktval"]
+    ].shift()
 
+    # compute beta on security return, joining market returns for this purpose
+    security_returns = security_returns.join(
+        mkt_rets, 
+        how="left", 
+        on="data_ym", 
+    )
+    # variances and covariances
+    security_return_label = "m_local_ret" # designates the return of interest
+    security_betas = security_returns.reset_index(
+    ).groupby(
+        ["gvkey", "iid"] # within issues
+    )[[security_return_label, "m_mktret"]].rolling(
+        12
+    ).cov().unstack()["m_mktret"].rename(
+        columns={
+            security_return_label: "cov(i,m)", 
+            "m_mktret": "var(m)", 
+        }
+    ).set_index(security_returns.index)
+    # beta only
+    security_betas["beta"] = security_betas["cov(i,m)"] / security_betas["var(m)"]
+    security_betas = security_betas.drop(columns=["cov(i,m)", "var(m)"])
+    # shfit one forward to prevent look-ahead bias
+    security_betas = security_betas.groupby(
+        level=["gvkey", "iid"]
+    ).shift()
+    # combine beta back into the main data
+    security_returns = pd.concat([security_returns, security_betas], axis=1)
+
+    # finalise the data, dropping due to the missing values from the shifts, etc
+    security_returns = security_returns.dropna()
+    # removal of rows with outliers is also possible: "m_USD_ret", "beta", "USD_mktval"
+    if len(drop_outliers) > 0:
+        keep_idx = pd.Series(True, index=security_returns.index)
+        for drop_col in drop_outliers:
+            keep_idx &= (
+                (security_returns[drop_col].quantile(0.001) < security_returns[drop_col])
+                & (security_returns[drop_col] < security_returns[drop_col].quantile(0.999))
+            )
+        security_returns = security_returns[keep_idx]
+    # Prepare for linking based on the prior year - for fundamentals and emissions
+    security_returns["datayear"] = security_returns.reset_index()["data_ym"].dt.year.values
+    security_returns["datayear-1"] = security_returns["datayear"] - 1
+
+    return security_returns
 
 def main():
     pass
