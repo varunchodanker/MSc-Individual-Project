@@ -3,6 +3,8 @@ import numpy as np
 import statsmodels.formula.api as smf
 
 WRITE_ON=True
+# sp far w.r.t gvkey as the query parameter
+WRITE_SPLIT_THRESHOLD=5000
 
 def write_ids(
     df, idname, filename, 
@@ -22,34 +24,50 @@ def write_ids(
         return
 
     id_vals = df.index.get_level_values(idname) if from_index else df[idname]
-    # 
-    with open(filename, "w") as fh:
-        for idval in id_vals.dropna().unique():
+    id_vals = list(id_vals.dropna().unique())
+    
+    current_split = 0
+    current_split_rows = 0
+    i = 0 # idx of next value to be written
+    while i < len(id_vals):
+        fh = open(f"p{current_split}_{filename}", "w")
+        while i < len(id_vals) and current_split_rows < WRITE_SPLIT_THRESHOLD:
+            idval = id_vals[i]
             fh.write(f"{idval}\n")
+            i += 1
+            current_split_rows += 1
+        fh.close()
+        current_split += 1
+        current_split_rows = 0
 
 
 def read_emissions(filename):
     return pd.read_csv(
         filename, 
-        dtype={"companyid": "str", "gvkey": "str"}, #identifiers
+        dtype={"gvkey": "str"}, #identifiers
         parse_dates=["periodenddate"], 
     )
 
 
-def write_emission_companyids(filename):
+def write_emission_ids(filename, idname):
     """  """
 
     emissions = read_emissions(filename)
-    write_ids(emissions, "companyid", "companyids.txt")
+    write_ids(emissions, idname, f"{idname}s.txt")
 
 
-def load_emissions(emissions_filename, jointable_filename):
+def combine_jointables(filenames):
+    return pd.concat(
+        [pd.read_csv(fname) for fname in filenames], 
+        ignore_index=True
+    )
+
+
+def load_emissions(emissions_filename, cid_gvkey_mappings):
     """ Loads the emissions dataset and performs the appropriate pre-processing 
     for linking. """
 
     emissions = read_emissions(emissions_filename)
-
-    cid_gvkey_mappings = pd.read_csv(jointable_filename)
     # consider 1 to 1 mappings to prevent redudancies in emissions information for gvkey
     cid_gvkey_mappings = cid_gvkey_mappings[
         (cid_gvkey_mappings["startdate"] == "B") & (cid_gvkey_mappings["enddate"] == "E")
@@ -66,7 +84,7 @@ def load_emissions(emissions_filename, jointable_filename):
     # remove surplus columns
     emissions = emissions.drop(
         columns=[
-            "institutionid", "periodenddate", "companyid", "companyname"
+            "institutionid", "periodenddate", "companyname"
         ]
     )
     # remove rows with missing values for the remaining relevant features
@@ -77,6 +95,7 @@ def load_emissions(emissions_filename, jointable_filename):
     emissions = emissions.set_index(
         ["gvkey", "fiscalyear"]
     )
+    emissions = emissions.sort_index()
 
     # finally, write out the gvkeys for linking with security and fundamentals data
     write_ids(emissions, "gvkey", "gvkeys.txt", from_index=True)
@@ -364,14 +383,21 @@ def main():
     # m_exrts = load_exrts("phase1_exrts.csv")
     # mkt_rets = load_market_returns("phase1_index.csv")
 
-    write_emission_companyids("emissions_2014to2024.csv")
-    # emissions = load_emissions("phase1_emissions.csv", "cid_gvkey_map.csv")
+    # write_emission_ids("emissions_2014to2024.csv", "gvkey")
+    """ creates px_gvkeys.txt files, from which we query cid mappings """
+    cid_gvkey_mappings = combine_jointables([f"p{i}_gvkey_cids.csv" for i in range(7)])
+
+    emissions = load_emissions("emissions_2014to2024.csv", cid_gvkey_mappings)
+    """ creates px_gvkeys.txt files, from which we aggregate and query fundamentals and 
+    returns (na&global for both) """
+
 
     # keep_cols=["ceq", "opm", "investment"]
-    # fundamentals = load_fundamentals(
-    #     "phase1_fundamentals.csv", m_exrts, 
+    na_fundamentals = load_fundamentals(
+        "fundamentals_2014to2024.csv", m_exrts, 
         
-    # )
+    )
+    print(na_fundamentals)
     
     # drop_outliers=["m_USD_ret", "beta", "USD_mktval"]
     # keep_cols=["datayear-1", "beta", "USD_mktval", "m_USD_ret"]
