@@ -2,8 +2,12 @@ import pandas as pd
 import numpy as np
 import statsmodels.formula.api as smf
 
+WRITE_ON=True
 
-def write_ids(df, idname, filename):
+def write_ids(
+    df, idname, filename, 
+    from_index=False
+):
     """ Writes the unique, non-NaN instances of the indicated identifier, within the 
     indicated dataframe, on separate lines of a new file, whose filename should 
     be specified.
@@ -13,8 +17,14 @@ def write_ids(df, idname, filename):
         idname: Column name of the identifier with respect to the dataframe.
         filename: The name to use for the newly created file.
     """
+    if not WRITE_ON:
+        print("WARNING: WRITING ATTEMPTED BUT BLOCKED")
+        return
+
+    id_vals = df.index.get_level_values(idname) if from_index else df[idname]
+    # 
     with open(filename, "w") as fh:
-        for idval in df[idname].dropna().unique():
+        for idval in id_vals.dropna().unique():
             fh.write(f"{idval}\n")
 
 
@@ -37,7 +47,7 @@ def load_emissions(emissions_filename, jointable_filename):
     """ Loads the emissions dataset and performs the appropriate pre-processing 
     for linking. """
 
-    emissions = read_emissions(filename)
+    emissions = read_emissions(emissions_filename)
 
     cid_gvkey_mappings = pd.read_csv(jointable_filename)
     # consider 1 to 1 mappings to prevent redudancies in emissions information for gvkey
@@ -53,7 +63,13 @@ def load_emissions(emissions_filename, jointable_filename):
     emissions = emissions[
         np.isin(emissions["gvkey"], cid_gvkey_mappings["gvkey"])
     ]
-    # remove rows with missing values
+    # remove surplus columns
+    emissions = emissions.drop(
+        columns=[
+            "institutionid", "periodenddate", "companyid", "companyname"
+        ]
+    )
+    # remove rows with missing values for the remaining relevant features
     emissions = emissions.dropna()
 
     # finalise the dataframe, ready for linking
@@ -61,14 +77,9 @@ def load_emissions(emissions_filename, jointable_filename):
     emissions = emissions.set_index(
         ["gvkey", "fiscalyear"]
     )
-    emissions = emissions.drop( # surplus columns
-        columns=[
-            "institutionid", "periodenddate", "companyid", "companyname"
-        ]
-    )
 
     # finally, write out the gvkeys for linking with security and fundamentals data
-    write_ids(emissions, "gvkey", "gvkeys.txt")
+    write_ids(emissions, "gvkey", "gvkeys.txt", from_index=True)
     # emissions is preprocessed and ready for modelling
     return emissions
 
@@ -102,7 +113,7 @@ def load_market_returns(filename):
     mkt_rets["data_ym"] = mkt_rets["datadate"].dt.to_period("M")
     mkt_rets = mkt_rets.set_index("data_ym")
     # compute monthly returns from prices
-    mkt_rets["m_mktret"] = mkt_rets["prccm"].pct_change()
+    mkt_rets["m_mktret"] = mkt_rets["prccm"].pct_change() * 100
     mkt_rets = mkt_rets.dropna()
     # only the final returns are needed
     mkt_rets = mkt_rets[["m_mktret"]]
@@ -347,7 +358,14 @@ def load_fundamentals(filename, m_exrts, keep_cols=None):
 
 
 def main():
-    pass
+    m_exrts = load_exrts("phase1_exrts.csv")
+    mkt_rets = load_market_returns("phase1_index.csv")
+
+    write_emission_companyids("phase1_emissions.csv")
+    emissions = load_emissions("phase1_emissions.csv", "cid_gvkey_map.csv")
+    print(emissions)
+    fundamentals = load_fundamentals("phase1_fundamentals.csv", m_exrts)
+    # security_returns = load_security_returns("phase1_returns.csv", m_exrts, mkt_rets)
 
 if __name__ == "__main__":
     main()
