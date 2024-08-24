@@ -112,7 +112,8 @@ def load_market_returns(filename):
     # year-month index
     mkt_rets["data_ym"] = mkt_rets["datadate"].dt.to_period("M")
     mkt_rets = mkt_rets.set_index("data_ym")
-    # compute monthly returns from prices
+    # compute monthly returns from prices, ensuring they are expressed as 
+    # percentages rather than fractions 
     mkt_rets["m_mktret"] = mkt_rets["prccm"].pct_change() * 100
     mkt_rets = mkt_rets.dropna()
     # only the final returns are needed
@@ -298,6 +299,8 @@ def load_fundamentals(filename, m_exrts, keep_cols=None):
     fundamentals = fundamentals.groupby(
         ["gvkey", "fiscalyear"]
     ).first()
+    # ensure proper sorting on this new index
+    fundamentals = fundamentals.sort_index()
     # drop rows if there are still any null values left despite consolidation
     fundamentals = fundamentals.dropna()
 
@@ -358,14 +361,24 @@ def load_fundamentals(filename, m_exrts, keep_cols=None):
 
 
 def main():
-    m_exrts = load_exrts("phase1_exrts.csv")
-    mkt_rets = load_market_returns("phase1_index.csv")
+    # m_exrts = load_exrts("phase1_exrts.csv")
+    # mkt_rets = load_market_returns("phase1_index.csv")
 
-    write_emission_companyids("phase1_emissions.csv")
-    emissions = load_emissions("phase1_emissions.csv", "cid_gvkey_map.csv")
-    print(emissions)
-    fundamentals = load_fundamentals("phase1_fundamentals.csv", m_exrts)
-    # security_returns = load_security_returns("phase1_returns.csv", m_exrts, mkt_rets)
+    write_emission_companyids("emissions_2014to2024.csv")
+    # emissions = load_emissions("phase1_emissions.csv", "cid_gvkey_map.csv")
+
+    # keep_cols=["ceq", "opm", "investment"]
+    # fundamentals = load_fundamentals(
+    #     "phase1_fundamentals.csv", m_exrts, 
+        
+    # )
+    
+    # drop_outliers=["m_USD_ret", "beta", "USD_mktval"]
+    # keep_cols=["datayear-1", "beta", "USD_mktval", "m_USD_ret"]
+    # security_returns = load_security_returns(
+    #     "phase1_returns.csv", m_exrts, mkt_rets, 
+        
+    # )
 
 if __name__ == "__main__":
     main()
