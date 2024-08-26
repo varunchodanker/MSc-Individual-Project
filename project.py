@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import statsmodels.formula.api as smf
 
-WRITE_ON=True
+WRITE_ON=False
 # sp far w.r.t gvkey as the query parameter
 WRITE_SPLIT_THRESHOLD=5000
 
@@ -387,17 +387,18 @@ def main():
     """ creates px_gvkeys.txt files, from which we query cid mappings """
     cid_gvkey_mappings = combine_jointables([f"p{i}_gvkey_cids.csv" for i in range(7)])
 
+    # emissions file still has excess gvkeys, it is filtered down during the 
+    # processing routine 
     emissions = load_emissions("emissions_2014to2024.csv", cid_gvkey_mappings)
     """ creates px_gvkeys.txt files, from which we aggregate and query fundamentals and 
     returns (na&global for both) """
 
 
     # keep_cols=["ceq", "opm", "investment"]
-    na_fundamentals = load_fundamentals(
-        "fundamentals_2014to2024.csv", m_exrts, 
+    # na_fundamentals = load_fundamentals(
+    #     "fundamentals_2014to2024.csv", m_exrts, 
         
-    )
-    print(na_fundamentals)
+    # )
     
     # drop_outliers=["m_USD_ret", "beta", "USD_mktval"]
     # keep_cols=["datayear-1", "beta", "USD_mktval", "m_USD_ret"]
