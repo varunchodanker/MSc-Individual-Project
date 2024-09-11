@@ -380,8 +380,8 @@ def load_fundamentals(filename, m_exrts, keep_cols=None):
 
 
 def main():
-    # m_exrts = load_exrts("phase1_exrts.csv")
-    # mkt_rets = load_market_returns("phase1_index.csv")
+    m_exrts = load_exrts("exrts_2014to2024.csv")
+    mkt_rets = load_market_returns("market_prices_2014to2024.csv")
 
     # write_emission_ids("emissions_2014to2024.csv", "gvkey")
     """ creates px_gvkeys.txt files, from which we query cid mappings """
@@ -395,10 +395,11 @@ def main():
 
 
     # keep_cols=["ceq", "opm", "investment"]
-    # na_fundamentals = load_fundamentals(
-    #     "fundamentals_2014to2024.csv", m_exrts, 
+    na_fundamentals = load_fundamentals(
+        "na_fundamentals_2014to2024.csv", m_exrts, 
         
-    # )
+    )
+    print(na_fundamentals)
     
     # drop_outliers=["m_USD_ret", "beta", "USD_mktval"]
     # keep_cols=["datayear-1", "beta", "USD_mktval", "m_USD_ret"]
